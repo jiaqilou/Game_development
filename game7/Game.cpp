@@ -1,0 +1,307 @@
+//
+//  Game.cpp
+//  Game-mac
+//
+//  Created by Sanjay Madhav on 5/31/17.
+//  Copyright © 2017 Sanjay Madhav. All rights reserved.
+//
+
+#include "Game.h"
+#include "Actor.h"
+#include <cstdio>
+#include <iostream>
+#include <SDL/SDL_image.h>
+
+// TODO
+using namespace std;
+const int width = 25;
+const int paddleheight = 100;
+const int paddlespeed = 300;
+const int ballV = 200;
+
+Game::Game() {
+	lasttime = 0;
+	paddlemovement = 0;
+	uplimit = width;
+	paddledownlimit = 768 - width - paddleheight;
+	balldownlimit = 768 - 2*width;
+	rightlimit = 1024 - 2*width;
+	ballvelocity = { ballV,ballV };
+
+	leftlimit = width;
+}
+
+bool Game::Initialize() {
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
+		SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
+		return false;
+	}
+
+	Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048);
+
+	window =  SDL_CreateWindow("window",100,50,1024,768,0);
+
+	renderer = SDL_CreateRenderer(window,-1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+	int flags = IMG_INIT_PNG;
+	int initted = IMG_Init(flags);
+	if ((initted&flags) != flags) {
+		printf("IMG_Init: Failed to init required png support!\n");
+		printf("IMG_Init: %s\n", IMG_GetError());
+		return false;
+	}
+	LoadData();
+
+	return true;
+}
+
+void Game::Shutdown(){
+	UnloadData();
+	Mix_CloseAudio();
+	IMG_Quit();
+	SDL_DestroyRenderer(renderer);
+	SDL_DestroyWindow(window);
+	SDL_Quit();
+}
+
+void Game::RunLoop() {
+	bool run = true;
+	bool up = true;
+	while (run&& up) {
+		run = ProcessInput();
+		up = UpdateGame();
+		GenerateOutput();
+	}
+}
+
+bool Game::ProcessInput()
+{
+	SDL_Event event;
+	while (SDL_PollEvent(&event)) {
+		if (event.type == SDL_QUIT) {
+			return false;
+		}
+	}
+	const Uint8 *state = SDL_GetKeyboardState(NULL);
+	if (state[SDL_SCANCODE_ESCAPE]) {
+		return false;
+	}
+
+	/*for (std::vector<Actor*>::iterator it = actor_vector.begin(); it != actor_vector.end(); ++it) {
+		(*it) -> Process
+	}*/
+	for (Actor* i : actor_vector) {
+		i->ProcessInput(state);
+	}
+
+	return true;
+}
+
+bool Game::UpdateGame()
+{
+	
+	/*currenttime = ((float)currentt / (float)1000);
+	deltatime = currenttime - lasttime;
+	lasttime = currenttime;*/
+	float max = 0.05;
+
+	Uint32 timeout = currentt + 16;
+	while (!SDL_TICKS_PASSED(SDL_GetTicks(), timeout)) {
+		//SDL_Log("waitings");
+	}
+	currentt = SDL_GetTicks();
+	deltatime = ((float)currentt - (float)lasttime) / (float)1000;
+	if (deltatime > max) {
+		deltatime = max;
+	}
+	lasttime = currentt;
+
+	std::vector<Actor*> actor_vector_copy = actor_vector;
+	for (Actor*i : actor_vector_copy) {
+		i->Update(deltatime);
+	}
+
+	std::vector<Actor*> dead_actor;
+	for (Actor*i : actor_vector) {
+		if (i->GetState() == Actor::EDead) {
+			dead_actor.push_back(i);
+		}
+	}
+	for (Actor*i : dead_actor) {
+		RemoveSprite(i->GetSprite());
+		delete i;
+	}
+	return true;
+}
+
+void Game::GenerateOutput()
+{
+	SDL_SetRenderDrawColor(renderer,34,139,34,255);
+	SDL_RenderClear(renderer);
+
+
+	//SDL_RenderCopy(renderer, texture_map["Assets/Stars.png"], NULL, NULL);
+	for (SpriteComponent* i : sprite_vector) {
+		i->Draw(renderer);
+	}
+
+	SDL_RenderPresent(renderer);
+}
+
+void Game::AddActor(Actor* actor) {
+	if (actor != NULL) {
+		actor_vector.push_back(actor);
+	}
+}
+
+void Game::RemoveActor(Actor* actor) {
+	std::vector<Actor*>::iterator it;
+
+	it = std::find(actor_vector.begin(), actor_vector.end(), actor);
+	if (it != actor_vector.end()) {
+		actor_vector.erase(it);
+	}
+}
+
+void Game::LoadData() {
+	LoadTexture("Assets/Airplane.png");
+	LoadTexture("Assets/Bullet.png");
+	LoadTexture("Assets/TileBrown.png");
+	LoadTexture("Assets/TileBrownSelected.png");
+	LoadTexture("Assets/TileGreen.png");
+	LoadTexture("Assets/TileGrey.png");
+	LoadTexture("Assets/TileGreySelected.png");
+	LoadTexture("Assets/Tower.png");
+	LoadTexture("Assets/TileTan.png");
+
+	mGrid = new Grid(this);
+}
+
+/*void Game::LoadData() {
+	LoadTexture("Assets/Background/Sky_0.png");
+	for (int i = 1; i <= 10; i++) {
+		string s = "Assets/Player/Run" + std::to_string(i) + ".png";
+		LoadTexture(s);
+	}
+
+	ifstream file("Assets/Level.txt");
+	string line;
+	int aaa = 0;
+	int b = 1;
+	while (getline(file, line)) // To get you all the lines.
+	{	
+		for (int i = 0; i < line.length(); i++) {
+			b = i+1;
+		
+			/*if (line.at(i) == 'O') {
+				BarrelSpawner* mBarrel = new BarrelSpawner(this);
+				mBarrel->SetPosition(Vector2(64 * b - 32, 16 + aaa * 32));
+				//AddSprite(mBarrel->GetSprite());
+			}
+			
+		}
+		aaa = aaa+1;
+		b = 1;
+	}//end of while
+}*/
+
+void Game::UnloadData() {
+	while (!actor_vector.empty()) {
+		delete actor_vector.back();
+	}
+
+	for (std::pair<std::string, SDL_Texture*> element : texture_map)
+	{
+		SDL_DestroyTexture(element.second);
+	}
+	texture_map.clear();
+
+
+	// free the sample
+	// Mix_Chunk *sample;
+	for (std::pair<std::string, Mix_Chunk*> i : sound_map)
+	{
+		Mix_FreeChunk(i.second);
+		i.second = NULL;
+	}
+	sound_map.clear();
+	texture_map.clear();
+}
+
+void Game::LoadTexture(std::string filename) {
+	SDL_Surface *image;
+	image = IMG_Load(filename.c_str());
+	if (!image) {
+		printf("IMG_Load: %s\n", IMG_GetError());
+		// handle error
+	}
+	SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, image);
+	if (texture == NULL) {
+		fprintf(stderr, "CreateTextureFromSurface failed: %s\n", SDL_GetError());
+		//exit(1);
+	}
+	SDL_FreeSurface(image);
+	image = NULL;
+	texture_map[filename] = texture;
+}
+
+SDL_Texture* Game::GetTexture(std::string filename) {
+	std::unordered_map<std::string, SDL_Texture*>::const_iterator it = texture_map.find(filename);
+
+	if (it == texture_map.end()) {
+		return NULL;
+	}
+	else {
+		return it->second;
+	}
+}
+
+void Game::AddSprite(SpriteComponent* sprite) {
+	sprite_vector.push_back(sprite);
+	std::sort(sprite_vector.begin(), sprite_vector.end(),
+		[](SpriteComponent* a, SpriteComponent* b) {
+		return a->GetDrawOrder() < b->GetDrawOrder();
+	});
+
+}
+
+void Game::RemoveSprite(SpriteComponent* sprite) {
+	std::vector<SpriteComponent*>::iterator it;
+	it = std::find(sprite_vector.begin(), sprite_vector.end(), sprite);
+	if (it != sprite_vector.end()) {
+		sprite_vector.erase(it);
+	}
+}
+
+
+
+
+void Game::LoadSound(const std::string& filename) {
+	// load sample.wav in to sample
+	Mix_Chunk *sample;
+	sample = Mix_LoadWAV(filename.c_str());
+	if (!sample) {
+		printf("Mix_LoadWAV: %s\n", Mix_GetError());
+		// handle error
+	}
+	sound_map[filename] = sample;
+}
+
+Mix_Chunk* Game::GetSound(const std::string& filename) {
+	std::unordered_map<std::string, Mix_Chunk*>::const_iterator it = sound_map.find(filename);
+
+	if (it == sound_map.end()) {
+		return NULL;
+	}
+	else {
+		return it->second;
+	}
+}
+
+const Vector2& Game::GetCameraPos() {
+	return mCameraPos;
+}
+
+void Game::SetCameraPos(const Vector2& cameraPos) {
+	mCameraPos = cameraPos;
+}
